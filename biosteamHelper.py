@@ -16,19 +16,19 @@ def lambda_handler(event, context):
     params = event['params']
     samples = event['samples']
     
-    # create UUID (use type 4 for generic uuid)
+    # Create UUID (use type 4 for generic uuid)
     jobId = str(uuid.uuid4())
     
-    # create timestamp for transaction, in unix format
+    # Create timestamp for transaction, in unix format
     jobTimestamp = time.time()
 
     # =============================================================================
     # Function router: send input biosteam data to corresponding function 
     # ============================================================================= 
     
-    # csUncertainty function
+    # Cornstover uncertainty function
     response = client.invoke(
-        FunctionName = 'arn:aws:lambda:us-east-1:499290667614:function:csUncertainty',
+        FunctionName = 'arn:aws:lambda:us-east-1:499290667614:function:uncertainty',
         InvocationType = 'Event',
         Payload = json.dumps({
             'jobId': jobId,
