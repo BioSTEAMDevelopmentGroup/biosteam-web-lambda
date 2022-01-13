@@ -1,7 +1,8 @@
 import json
 import os
 import sys
-from chaospy import distributions as shape
+
+
 
 try:
     import boto3
@@ -24,10 +25,10 @@ except ImportError:
     table = MockTable()
 else:
     # Setting library paths.
-    efs_path = "/mnt/simulate"
-    python_pkg_path = os.path.join(efs_path, "/lib")
-    sys.path.append(python_pkg_path)
+    sys.path.append("/mnt/biosteam-packages")
+    os.environ[ 'NUMBA_CACHE_DIR' ] = '/tmp/'
     
+    from chaospy import distributions as shape
     # Create dynamodb resource for posting biosteam outputs
     dynamodb = boto3.resource('dynamodb')
     # Imports from EFS library mounted to root /mnt/simulate folder /lib/
@@ -37,23 +38,27 @@ else:
 # =============================================================================
 
 def lambda_handler(event, context):
-    model = event['model']
-    if model == 'cornstover':
-        from biorefineries.cornstover.webapp_model import model
-    elif model == 'oilcane':
-        import biorefineries.oilcane as oc
-        oc.load('O1')
-        model = oc.model
-    all_parameters = {i.name: i for i in model.parameters}
-    
-    # Rerun model at baseline to reset cache
-    baseline_metrics = model.metrics_at_baseline() 
-    
     # Parse input and define data variables 
     jobId = event['jobId']
     jobTimestamp = event['jobTimestamp']
     param_dict = event['params']
     samples_int = event['samples']
+    
+    model = event['model'].lower()
+    if model == 'cornstover':
+        from biorefineries.cornstover.webapp_model import model
+        
+    elif model == 'oilcane':
+        from biorefineries.oilcane.webapp_model import model
+        # oc.load('O1')
+        # model = oc.model
+    # else:
+    #     print("invalid model " + model)
+    all_parameters = {i.name: i for i in model.parameters}
+    print(all_parameters)
+    # Rerun model at baseline to reset cache
+    baseline_metrics = model.metrics_at_baseline() 
+
     
     parameters = []
     for item in param_dict:
@@ -61,6 +66,7 @@ def lambda_handler(event, context):
         if name in all_parameters:
             parameter = all_parameters[name]
         else:
+            print(all_parameters)
             raise RuntimeError(f'no parameter with name {name}')
             
         parameters.append(parameter)
@@ -102,7 +108,7 @@ def lambda_handler(event, context):
     jobTimestamp = int(jobTimestamp)
     
     # Instatiate table 
-    table = dynamodb.Table('biosteamResults')
+    table = dynamodb.Table('biosteam-results')
     print(table.creation_date_time)
     
     # Add biosteam results to table 
