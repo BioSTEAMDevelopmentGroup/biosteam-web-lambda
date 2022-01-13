@@ -1,3 +1,12 @@
+# import json
+
+# def lambda_handler(event, context):
+#     # TODO implement
+#     return {
+#         'statusCode': 200,
+#         'body': json.dumps('Hello from Lambda!')
+#     }
+
 import json
 import boto3
 
@@ -10,20 +19,22 @@ dynamodb = boto3.client('dynamodb')
 
 def lambda_handler(event, context):
     #Read postId from event 
+    print(event)
     jobId = event['jobId']  
-    
+    print('jobId', jobId)
     #check if item exists and get corresponting item or throw error
     try:
         response = dynamodb.get_item(
-            TableName='biosteamResults',
+            TableName='biosteam-results',
             Key={
               'jobId': {'S': jobId}
             }
         )
+
         item = response['Item']
     except: 
         item = "no data"
- 
+    print('item ', item)
     return {
         'statusCode': 200,
         "headers": {
