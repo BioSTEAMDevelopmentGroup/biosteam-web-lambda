@@ -15,29 +15,43 @@ def lambda_handler(event, context):
     # read input biosteam data
     params = event['params']
     samples = event['samples']
-    
-    # Create UUID (use type 4 for generic uuid)
+    model = event['model']
+
+    # create UUID (use type 4 for generic uuid)
     jobId = str(uuid.uuid4())
     
-    # Create timestamp for transaction, in unix format
+    # create timestamp for transaction, in unix format
     jobTimestamp = time.time()
 
     # =============================================================================
     # Function router: send input biosteam data to corresponding function 
     # ============================================================================= 
     
-    # Cornstover uncertainty function
+    print('random')
+    
+    temp = json.dumps({
+            'jobId': jobId,
+            'jobTimestamp': jobTimestamp,
+            'params': params,
+            'samples': samples,
+            'model': model
+        })
+    print(temp)
+
+    # csUncertainty function
     response = client.invoke(
-        FunctionName = 'arn:aws:lambda:us-east-1:499290667614:function:uncertainty',
+        FunctionName = 'arn:aws:lambda:us-west-1:085967298430:function:csUncertainty',
         InvocationType = 'Event',
         Payload = json.dumps({
             'jobId': jobId,
             'jobTimestamp': jobTimestamp,
             'params': params,
             'samples': samples,
+            'model': model
         })
     )
-    
+
+    print(response)
     return {
         'statusCode': 200,
         "headers": {
