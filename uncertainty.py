@@ -73,13 +73,13 @@ def lambda_handler(event, context):
         values = item['values']
         distribution = item['distribution'].capitalize()
         if distribution == 'Triangular':
-            lower = values['value1']
-            midpoint = values['value2']
-            upper = values['value3']
+            lower = values['lower']
+            midpoint = values['midpoint']
+            upper = values['upper']
             parameter.distribution = shape.Triangle(lower=lower, midpoint=midpoint, upper=upper)
         elif distribution == 'Uniform':
-            lower = values['value1']
-            upper = values['value2']
+            lower = values['lower']
+            upper = values['upper']
             parameter.distribution = shape.Uniform(lower=lower, upper=upper)
         else:
             raise RuntimeError(f"distribution {distribution} not available yet")
