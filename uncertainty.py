@@ -93,16 +93,23 @@ def lambda_handler(event, context):
     except Exception as e:
         raise e
     else:
-        results = model.table.iloc[:, len(parameters):].copy()
+        def get_name(metric):
+            name = metric.name 
+            if metric.units: name += f" [{metric.units}]"
+            return name
+        results = model.table
         spearman_rhos, ps = model.spearman_r() 
+        param_names = [get_name(i) for i in parameters]
+        metric_names = [get_name(i) for i in model.metrics]
+        names = param_names + metric_names
+        results_dict = {i: j.tolist() for i, j in zip(names, results.values.transpose())}
+        results_json = json.dumps(results_dict)
+        spearman_rhos_dict = {col: {row: float(value) for row, value in zip(param_names, values)}
+                              for col, values in zip(metric_names, spearman_rhos.values.transpose())}
+        spearman_rhos_json = json.dumps(spearman_rhos_dict)
+
     finally:
         model.parameters = tuple(all_parameters.values())
-
-    # Format outputs 
-    results = results.droplevel('Element', axis=1)
-    results_dict = results.to_dict(orient='list')
-    results_json = json.dumps(results_dict)
-    spearman_rhos_json = spearman_rhos.to_json()
 
     # Add outputs to DynamoDB table: biosteamJobResults
     jobTimestamp = int(jobTimestamp)
