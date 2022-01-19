@@ -14,8 +14,9 @@ client = boto3.client('lambda')
 def lambda_handler(event, context):
     # read input biosteam data
     params = event['params']
-    samples = event['samples']
-    model = event['model']
+    # samples = event['samples']
+    # model = event['model']
+    
 
     # create UUID (use type 4 for generic uuid)
     jobId = str(uuid.uuid4())
@@ -29,14 +30,14 @@ def lambda_handler(event, context):
     
     print('random')
     
-    temp = json.dumps({
-            'jobId': jobId,
-            'jobTimestamp': jobTimestamp,
-            'params': params,
-            'samples': samples,
-            'model': model
-        })
-    print(temp)
+    # temp = json.dumps({
+    #         'jobId': jobId,
+    #         'jobTimestamp': jobTimestamp,
+    #         'params': params,
+    #         'samples': samples,
+    #         'model': model
+    #     })
+    # print(temp)
 
     # csUncertainty function
     response = client.invoke(
@@ -45,9 +46,11 @@ def lambda_handler(event, context):
         Payload = json.dumps({
             'jobId': jobId,
             'jobTimestamp': jobTimestamp,
-            'params': params,
-            'samples': samples,
-            'model': model
+            **event
+            # 'params': params,
+            # 'samples': samples,
+            # 'model': model,
+            # 'sim_type': 
         })
     )
 
