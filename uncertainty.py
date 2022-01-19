@@ -43,6 +43,7 @@ def lambda_handler(event, context):
     jobTimestamp = event['jobTimestamp']
     param_dict = event['params']
     samples_int = event['samples']
+    sim_type = event['sim_type']
     
     model = event['model'].lower()
     if model == 'cornstover':
@@ -56,8 +57,6 @@ def lambda_handler(event, context):
     #     print("invalid model " + model)
     all_parameters = {i.name: i for i in model.parameters}
     print(all_parameters)
-    # Rerun model at baseline to reset cache
-    baseline_metrics = model.metrics_at_baseline() 
 
     
     parameters = []
@@ -71,45 +70,78 @@ def lambda_handler(event, context):
             
         parameters.append(parameter)
         values = item['values']
-        distribution = item['distribution'].capitalize()
-        if distribution == 'Triangular':
-            lower = values['lower']
-            midpoint = values['midpoint']
-            upper = values['upper']
-            parameter.distribution = shape.Triangle(lower=lower, midpoint=midpoint, upper=upper)
-        elif distribution == 'Uniform':
-            lower = values['lower']
-            upper = values['upper']
-            parameter.distribution = shape.Uniform(lower=lower, upper=upper)
+        if sim_type == 'uncertainty':
+            distribution = item['distribution'].capitalize()
+            parameter.baseline = values['baseline']
+            if distribution == 'Triangular':
+                lower = values['lower']
+                midpoint = values['mode']
+                upper = values['upper']
+                parameter.distribution = shape.Triangle(lower=lower, midpoint=midpoint, upper=upper)
+            elif distribution == 'Uniform':
+                lower = values['lower']
+                upper = values['upper']
+                parameter.distribution = shape.Uniform(lower=lower, upper=upper)
+            else:
+                raise RuntimeError(f"distribution {distribution} not available yet")
+        elif sim_type == 'single':
+            parameter.baseline = values['baseline']
         else:
-            raise RuntimeError(f"distribution {distribution} not available yet")
+            print('Simulation type not implemented:', sim_type)
+    
+    # Rerun model at baseline to reset cache
+    baseline_metrics = model.metrics_at_baseline() 
     
     # Run model 
-    try:
-        model.parameters = parameters
-        samples = model.sample(N=samples_int, rule='L')
-        model.load_samples(samples)
-        model.evaluate()
-    except Exception as e:
-        raise e
-    else:
+    
+    # results_payload={
+    #         'jobId': jobId,
+    #         'jobTimestamp': jobTimestamp,
+    #         # 'results': results_json,
+    #         # 'spearmanResults': spearman_rhos_json,
+    #     }
+    
+    if sim_type == 'uncertainty':
+        try:
+            model.parameters = parameters
+            samples = model.sample(N=samples_int, rule='L')
+            model.load_samples(samples)
+            model.evaluate()
+        except Exception as e:
+            raise e
+        else:
+            def get_name(metric):
+                name = metric.name 
+                if metric.units: name += f" [{metric.units}]"
+                return name
+            results = model.table
+            spearman_rhos, ps = model.spearman_r() 
+            param_names = [get_name(i) for i in parameters]
+            metric_names = [get_name(i) for i in model.metrics]
+            names = param_names + metric_names
+            results_dict = {i: j.tolist() for i, j in zip(names, results.values.transpose())}
+            results_json = json.dumps(results_dict)
+            spearman_rhos_dict = {col: {row: float(value) for row, value in zip(param_names, values)}
+                                  for col, values in zip(metric_names, spearman_rhos.values.transpose())}
+            spearman_rhos_json = json.dumps(spearman_rhos_dict)
+            # results_payload['results'] = json.dumps(json.load(results_json, parse_float=Decimal))
+            # results_payload['spearmanResults'] = json.dumps(json.load(spearman_rhos_json, parse_float=Decimal))
+    
+        finally:
+            model.parameters = tuple(all_parameters.values())
+    elif sim_type == 'single':
         def get_name(metric):
-            name = metric.name 
-            if metric.units: name += f" [{metric.units}]"
-            return name
-        results = model.table
-        spearman_rhos, ps = model.spearman_r() 
-        param_names = [get_name(i) for i in parameters]
+                name = metric.name 
+                if metric.units: name += f" [{metric.units}]"
+                return name
+        baseline_metrics = model.metrics_at_baseline()
         metric_names = [get_name(i) for i in model.metrics]
-        names = param_names + metric_names
-        results_dict = {i: j.tolist() for i, j in zip(names, results.values.transpose())}
-        results_json = json.dumps(results_dict)
-        spearman_rhos_dict = {col: {row: float(value) for row, value in zip(param_names, values)}
-                              for col, values in zip(metric_names, spearman_rhos.values.transpose())}
-        spearman_rhos_json = json.dumps(spearman_rhos_dict)
-
-    finally:
-        model.parameters = tuple(all_parameters.values())
+        single_results = {i: j for i, j in zip(metric_names, baseline_metrics.values)}
+        single_results = json.dumps(single_results)
+        # results_payload['singleResults'] = json.dumps(json.load(single_results, parse_float=Decimal))
+        
+    else:
+        print('Simulation type not implemented:', sim_type)
 
     # Add outputs to DynamoDB table: biosteamJobResults
     jobTimestamp = int(jobTimestamp)
@@ -119,14 +151,31 @@ def lambda_handler(event, context):
     print(table.creation_date_time)
     
     # Add biosteam results to table 
-    table.put_item(
-      Item={
-            'jobId': jobId,
-            'jobTimestamp': jobTimestamp,
-            'results': results_json,
-            'spearmanResults': spearman_rhos_json,
-        }
-    )
+    # print(results_payload)
+    # from warnings import warn
+    # warn(str(results_payload))
+    if sim_type == 'uncertainty':
+        table.put_item(
+            Item={
+                'jobId': jobId,
+                'jobTimestamp': jobTimestamp,
+                'results': results_json,
+                'spearmanResults': spearman_rhos_json,
+                # 'singleResults': single_results
+            }
+        )
+    elif sim_type == 'single':
+        table.put_item(
+            Item={
+                'jobId': jobId,
+                'jobTimestamp': jobTimestamp,
+                # 'results': results_json,
+                # 'spearmanResults': spearman_rhos_json,
+                'singleResults': single_results
+            }
+        )
+    else:
+        print("Simulation type not implemented")
 
     # Return job status
     return {
